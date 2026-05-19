@@ -36,6 +36,7 @@ tape_stop (slow+fast resample)
 | node3_glitcher.py | FIXED — voiced_flag now used; synth silenced in unvoiced/silent frames |
 | requirements.txt | CREATED |
 | DEVNOTES.md | CREATED |
+| node3_glitcher.py | UPDATED — tempo_map_json optional input added; stutter syncs to beat duration; delay snaps to nearest beat subdivision |
 
 ---
 
@@ -54,3 +55,4 @@ Next session (SMG-2): add tempo_map_json input for beat-synced stutter/delay.
 | Date | What happened |
 |---|---|
 | 2026-05-18 | Initial bug fix pass. 4 bugs fixed. requirements.txt and DEVNOTES created. |
+| 2026-05-18 | Session 2 (SMG-2): Added tempo_map_json input. Stutter and delay now beat-synced when TempoMapperNode output is connected. |
