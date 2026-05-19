@@ -133,7 +133,7 @@ class ComfySynthMimicGlitcher:
                 mimic_feed = self._apply_mimic_effect(mimic_feed, mimic_effect, sample_rate)
             
             # Mix dry and wet
-            audio_out[:, ch] = (1 - dry_wet_mix) * audio_in[:,	ch] + dry_wet_mix * mimic_feed
+            audio_out[:, ch] = (1 - dry_wet_mix) * audio_in[:, ch] + dry_wet_mix * mimic_feed
 
         # Return to original shape if mono
         if original_mono:
@@ -150,7 +150,6 @@ class ComfySynthMimicGlitcher:
     def _detect_pitch_librosa(self, audio: np.ndarray, sample_rate: int, sensitivity: float) -> np.ndarray:
         """Detect pitch using librosa with fallback."""
         if LIBROSA_AVAILABLE:
-            # Use probabilistic YIN algorithm
             f0, voiced_flag, voiced_probs = librosa.pyin(
                 audio,
                 fmin=librosa.note_to_hz('C2'),
@@ -160,9 +159,10 @@ class ComfySynthMimicGlitcher:
                 hop_length=512,
                 fill_na=np.nan
             )
-            # Fill NaN with median pitch
-            median_f0 = np.nanmedian(f0)
-            f0 = np.where(np.isnan(f0), median_f0, f0)
+            # Zero out unvoiced frames so synth does not fire during silence
+            median_f0 = np.nanmedian(f0) if np.any(~np.isnan(f0)) else 440.0
+            f0 = np.where(np.isnan(f0), 0.0, f0)        # NaN → 0 (silence)
+            f0 = np.where(voiced_flag, f0, 0.0)          # unvoiced → 0
             return f0
         else:
             # Fallback: simple autocorrelation
@@ -218,11 +218,8 @@ class ComfySynthMimicGlitcher:
                 np.random.shuffle(scrambled[i:end])
             return scrambled
         elif effect == "fry":
-            # High-frequency distortion
-            # Simple high-pass filter
-            from scipy.signal import butter, filtfilt
-            b, a = butter(1, 1000 / (sample_rate / 2), btype='high')
-            return filtfilt(b, a, audio) * 2
+            b, a = scipy.signal.butter(1, 1000 / (sample_rate / 2), btype='high')
+            return scipy.signal.filtfilt(b, a, audio) * 2
         elif effect == "glitch":
             # Digital artifacts
             glitch_audio = np.copy(audio)
@@ -239,11 +236,17 @@ class ComfySynthMimicGlitcher:
             repeated = np.tile(stutter, len(audio) // stutter_len + 1)[:len(audio)]
             return repeated
         elif effect == "tape_stop":
-            # Slow-down and speed-up
             slow_factor = 0.5
             fast_factor = 2.0
             mid = len(audio) // 2
+            # Resample each half, then crossfade + pad to preserve original length
             slow_part = scipy.signal.resample(audio[:mid], int(mid * slow_factor))
             fast_part = scipy.signal.resample(audio[mid:], int((len(audio) - mid) / fast_factor))
-            return np.concatenate([slow_part, fast_part])[:len(audio)]
+            combined = np.concatenate([slow_part, fast_part])
+            # Ensure output matches input length exactly
+            if len(combined) < len(audio):
+                combined = np.pad(combined, (0, len(audio) - len(combined)))
+            else:
+                combined = combined[:len(audio)]
+            return combined
         return audio
